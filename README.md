@@ -29,6 +29,11 @@ The expected result is that the performance gets drastically worse on the first 
 
 Downsides: we have to have all the data at the start (or need to retrain the network on *all* previous data every time we want to teach it a new task.)
 
+This experiment also serves to show that the network is overparameterized enough to be able to learn both datasets.
+The accuracy reached (around 96% max.) is nothing to write home about, but it's in line with the accuracy we got when training one dataset on its own, and so we can use it to compare our future EWC-adjusted results against.
+
+![Graph showing difference between sequential and interleaved training](sequential-and-mixed.png)
+
 ## Adding in Elastic Weight Consolidation
 
 Same setup as above, but this time with the technique as described in the paper.

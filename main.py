@@ -15,6 +15,33 @@ from simple_network import Network
 FLAGS = None
 
 
+def run_training(network, sess, training_datasets, evaluation_datasets, verbose=True):
+    with open(FLAGS.mode + '.csv', 'w') as f:
+        fieldnames = ["Epoch", "Group", "TestAccuracy"]
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+
+        epoch = 0
+
+        for data in training_datasets:
+            total = 1000
+            for i in range(total):
+                batch_xs, batch_ys = data.train.next_batch(100)
+                sess.run(network.train_step, feed_dict={network.inputs: batch_xs, network.correct_labels: batch_ys})
+                if i % 50 == 0:
+                    for j in range(len(evaluation_datasets)):
+                        test_accuracy = sess.run(
+                            network.accuracy,
+                            feed_dict={
+                                network.inputs: evaluation_datasets[j].test.images,
+                                network.correct_labels: evaluation_datasets[j].test.labels
+                            }
+                        )
+                        if verbose:
+                            print(str(j+1), ':', test_accuracy)
+                        writer.writerow({'Epoch': i + epoch, 'TestAccuracy': test_accuracy, 'Group': j+1})
+            epoch += total
+
 
 def main(_):
     mnist = input_data.read_data_sets(FLAGS.data_dir, one_hot=True)
@@ -26,11 +53,25 @@ def main(_):
     permuted.test._images = permuted.test._images[:, perm]
     permuted.validation._images = permuted.validation._images[:, perm]
 
+    combined = deepcopy(mnist)
+    combined.train._images = np.concatenate((mnist.train._images, permuted.train._images))
+    combined.train._labels = np.concatenate((mnist.train._labels, permuted.train._labels))
+    combined.train._num_examples *= 2
+    combined.test._images = np.concatenate((mnist.test._images, permuted.test._images))
+    combined.test._labels = np.concatenate((mnist.test._labels, permuted.test._labels))
+    combined.test._num_examples *= 2
+    combined.validation._images = np.concatenate((mnist.validation._images, permuted.validation._images))
+    combined.validation._labels = np.concatenate((mnist.validation._labels, permuted.validation._labels))
+    combined.validation._num_examples *= 2
 
     if FLAGS.mode == 'simple':
         network = Network()
+        training_datasets = [mnist, permuted]
+        evaluation_datasets = [mnist, permuted]
     elif FLAGS.mode == 'mixed':
-        raise NotImplementedError("Mixed mode not implemented yet!")
+        network = Network()
+        training_datasets = [combined, combined]
+        evaluation_datasets = [mnist, permuted]
     elif FLAGS.mode == 'ewc':
         raise NotImplementedError("EWC mode not implemented yet!")
     else:
@@ -39,70 +80,8 @@ def main(_):
     sess = tf.InteractiveSession()
     tf.global_variables_initializer().run()
 
-    with open(FLAGS.mode + '.csv', 'w') as f:
-        fieldnames = ["Epoch", "Group", "TestAccuracy"]
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        writer.writeheader()
+    run_training(network, sess, training_datasets, evaluation_datasets)
 
-        for i in range(1001):
-            batch_xs, batch_ys = mnist.train.next_batch(100)
-            sess.run(network.train_step, feed_dict={network.inputs: batch_xs, network.correct_labels: batch_ys})
-            if i % 50 == 0:
-                test_accuracy1 = sess.run(
-                    network.accuracy,
-                    feed_dict={
-                        network.inputs: mnist.test.images,
-                        network.correct_labels: mnist.test.labels
-                    }
-                )
-                test_accuracy2 = sess.run(
-                    network.accuracy,
-                    feed_dict={
-                        network.inputs: permuted.test.images,
-                        network.correct_labels: permuted.test.labels
-                    }
-                )
-
-                writer.writerow({'Epoch': i, 'TestAccuracy': test_accuracy1, 'Group': 1})
-                writer.writerow({'Epoch': i, 'TestAccuracy': test_accuracy2, 'Group': 2})
-                #print("Training error:",
-                #      sess.run(network.accuracy,
-                #               feed_dict={
-                #                   network.inputs: mnist.train.images,
-                #                   network.correct_labels: mnist.train.labels
-                #               }))
-                #print(" Testing error:",
-                #      sess.run(network.accuracy,
-                #               feed_dict={
-                #                   network.inputs: mnist.test.images,
-                #                   network.correct_labels: mnist.test.labels
-                #               }))
-
-        for i in range(1001, 2001):
-            batch_xs, batch_ys = permuted.train.next_batch(100)
-            sess.run(network.train_step, feed_dict={network.inputs: batch_xs, network.correct_labels: batch_ys})
-            if i % 50 == 0:
-                test_accuracy1 = sess.run(
-                    network.accuracy,
-                    feed_dict={
-                        network.inputs: mnist.test.images,
-                        network.correct_labels: mnist.test.labels
-                    }
-                )
-                test_accuracy2 = sess.run(
-                    network.accuracy,
-                    feed_dict={
-                        network.inputs: permuted.test.images,
-                        network.correct_labels: permuted.test.labels
-                    }
-                )
-
-                writer.writerow({'Epoch': i, 'TestAccuracy': test_accuracy1, 'Group': 1})
-                writer.writerow({'Epoch': i, 'TestAccuracy': test_accuracy2, 'Group': 2})
-
-        print(sess.run(network.accuracy, feed_dict={network.inputs: mnist.train.images, network.correct_labels: mnist.train.labels}))
-        print(sess.run(network.accuracy, feed_dict={network.inputs: mnist.test.images,
-                                      network.correct_labels: mnist.test.labels}))
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
