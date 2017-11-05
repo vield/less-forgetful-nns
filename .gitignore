@@ -1,0 +1,7 @@
+.idea
+__pycache__
+
+*.csv
+
+MNIST_data/
+papers/
