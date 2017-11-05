@@ -1,22 +1,12 @@
 import argparse
 from copy import deepcopy
 import csv
-import sys
 
 import numpy as np
 
-from tensorflow.examples.tutorials.mnist import input_data
-import tensorflow as tf
-
-
-from simple_network import Network
-
-
-FLAGS = None
-
 
 def run_training(network, sess, training_datasets, evaluation_datasets, verbose=True):
-    with open(FLAGS.mode + '.csv', 'w') as f:
+    with open(options.mode + '.csv', 'w') as f:
         fieldnames = ["Epoch", "Group", "TestAccuracy"]
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
@@ -43,8 +33,13 @@ def run_training(network, sess, training_datasets, evaluation_datasets, verbose=
             epoch += total
 
 
-def main(_):
-    mnist = input_data.read_data_sets(FLAGS.data_dir, one_hot=True)
+def main(options):
+    from tensorflow.examples.tutorials.mnist import input_data
+    import tensorflow as tf
+
+    from simple_network import Network
+
+    mnist = input_data.read_data_sets(options.data_dir, one_hot=True)
 
     np.random.seed(1)
     perm = np.random.permutation(mnist.train._images.shape[1])
@@ -64,18 +59,18 @@ def main(_):
     combined.validation._labels = np.concatenate((mnist.validation._labels, permuted.validation._labels))
     combined.validation._num_examples *= 2
 
-    if FLAGS.mode == 'simple':
+    if options.mode == 'simple':
         network = Network()
         training_datasets = [mnist, permuted]
         evaluation_datasets = [mnist, permuted]
-    elif FLAGS.mode == 'mixed':
+    elif options.mode == 'mixed':
         network = Network()
         training_datasets = [combined, combined]
         evaluation_datasets = [mnist, permuted]
-    elif FLAGS.mode == 'ewc':
+    elif options.mode == 'ewc':
         raise NotImplementedError("EWC mode not implemented yet!")
     else:
-        raise Exception("Unrecognized mode: " + FLAGS.mode)
+        raise Exception("Unrecognized mode: " + options.mode)
 
     sess = tf.InteractiveSession()
     tf.global_variables_initializer().run()
@@ -88,5 +83,7 @@ if __name__ == '__main__':
     parser.add_argument('--data_dir', type=str, default='./MNIST_data',
                       help='Directory for storing input data')
     parser.add_argument('--mode', type=str, default="simple", choices=('simple', 'mixed', 'ewc'))
-    FLAGS, unparsed = parser.parse_known_args()
-    tf.app.run(main=main, argv=[sys.argv[0]] + unparsed)
+
+    options = parser.parse_args()
+
+    main(options)
