@@ -1,50 +1,90 @@
 # Less Forgetful Neural Networks Using Elastic Weight Consolidation
 
-![Accuracy on two dataset with different training scenarios.](sequential-and-mixed-and-ewc.png)
+![Accuracy on two datasets with different training scenarios.](sequential-and-mixed-and-ewc.png)
 
-This work is based on a DeepMind paper ([Kirkpatrick et al., 2016](https://arxiv.org/pdf/1612.00796.pdf)).
+## Problem
 
-**Problem.** When training a neural network sequentially to perform multiple different tasks, the first tasks will be overwritten by the latter (in that the weights in the network are "repurposed" to better fit the latter tasks, and no longer represent what was originally learnt for the first task). This is referred to as catastrophic forgetting.
+When training a neural network sequentially on two or more tasks, the weights learned for the first tasks will get overwritten as weights are learned for the latter tasks.
+This is referred to as **catastrophic forgetting**.
+The top graph shows how the accuracy goes down on the first dataset as we begin training with a second dataset.
 
-**Solution.** The solution is inspired by nature and recent research into how mammals such as ourselves are able to continuously learn different tasks without overwriting previous ones. (Now, I'm not a brain researcher...) Learning a task that uses particular synapses strengthens those synapses, making them more persistent to prevent subsequent learned tasks from "overwriting" what was saved in them. The corresponding solution in artificial neural networks, as suggested by Kirkpatrick et al., is called *elastic weight consolidation*, and it works by slowing down learning in nodes that are vital for some previously learned task.
+One way to avoid catastrophic forgetting is to ensure that all training data is available during the initial training.
+The second graph from the top shows how we can get good performance on both datasets if we use both of them when training the network from the start.
 
-## Data
+Alternatively, we could be storing (some) data from previous training sessions to be replayed to the network as it learns new tasks to prevent it from forgetting previously learned ones.
+None of these solutions are fully satisfactory; all training data might not be available at the start, or there might be very large amounts of training data and it would be impractical to store it or to replay it to the network later. 
 
-One of the experiments detailed in the paper uses data derived from the MNIST dataset, used as input for a classification task. (The other, more interesting one uses the network to learn to play Atari games. Also see e.g. [DQN](https://deepmind.com/research/dqn/) and the [Arcade Learning Environment](https://github.com/mgbellemare/Arcade-Learning-Environment).)
+## Solution
 
-This experiment uses the simpler classification data (which has a bit of a hello-world status in machine learning and classification, so the advantage is that I was already familiar with the dataset, and quite possibly most people reading this will be as well).
+The solution is inspired by an observation about mammalian brains.
+As animals learn new tasks, the related synapses in the brain are strengthened, making them less plastic and thus less likely to be overwritten.
+
+The idea translates to artificial neural networks as follows:
+we slow down reassignment in weights that have been identified to be important for previous tasks.
+This is something of a Bayesian approach: we have prior information about the values of the weights and how certain we are about those values.
+
+In practice, there is a quadratic penalty added to the cost function for moving the weights from their original positions.
+The importance is represented by the diagonal of the Fisher information matrix.
+The algorithm is called **Elastic Weight Consolidation**.
+(See [Kirkpatrick et al., 2016](https://arxiv.org/pdf/1612.00796.pdf)). 
+
+The bottom graph shows how we can use EWC to maintain relatively good performance on the first dataset even when the dataset is no longer used for training.
+Other things that affect performance is the importance we place on the old values, and the capabilities of the network to learn many tasks (= the number of nodes and layers).
+
+## Setup
+
+### Data
+
+One of the experiments in the paper uses data from the MNIST dataset (handwritten digit classification).
+
+To generate additional datasets, fixed permutations are applied to the data.
+
+#### Example
+
+![A figure seven from the dataset](seven.png)
+![The same figure permuted](seven_permuted.png)
+
+### Neural network
+
+Partially following the setup in the paper, our network is a fully connected "traditional" MLP with ReLU activation functions.
+The network has two hidden layers with weight and bias nodes.
+We use stochastic gradient descent for the weight optimization.
+(For further details, probably best to look at the code as I might have shuffled some things around.)
 
 ## Reproducing the "catastrophic forgetting" effect
 
-The different tasks will be to classify handwritten digits in
+The first part is easy:
+we define the network architecture and train it normally with the original dataset.
+After that, we start training it on the second dataset (as if we were starting from scratch with random weights).
 
-1. their original form
-2. in a "permuted" form (we specify a transformation to apply to the MNIST data).
+After every SGD minibatch we evaluate the performance on both the first dataset and the second one.
+Initially, the performance on the second dataset is basically as good as guessing, as the datasets don't resemble each other at all.
+As we start training on the second dataset, the network forgets some of what it had learned about the original one, and the accuracy becomes worse.
 
-I will first train the network to classify handwritten digits as usual, and measure its performance. 
-Then I'll continue training the network on the permuted dataset, and measure its performance on both the first and the second dataset. 
-The expected result is that the performance gets drastically worse on the first dataset.
+## Learn both tasks together
 
-![Graph showing loss of accuracy on first dataset as NN learns a second one.](sequential.png)
+This one's partly just sanity-checking:
+we expect that the network will be able to learn good weights for both tasks at the same time.
+The graph shows that we reach similar levels of accuracy here as we did for each dataset individually in the first experiment.
 
-## One solution: Learn both tasks together
-
-Downsides: we have to have all the data at the start (or need to retrain the network on *all* previous data every time we want to teach it a new task.)
-
-![Graph showing difference between sequential and interleaved training](sequential-and-mixed.png)
+(The accuracy is nowhere near state-of-the-art, but good enough to demonstrate the effects.)
 
 ## Adding in Elastic Weight Consolidation
 
-**Idea:** Constrain parameters important for the previously learned task to stay near their old values as we adjust the parameters to also fit the next task.
+We first train the network normally (using the same cross-entropy cross function as we used for both setups above).
 
-As long as the network is sufficiently overparameterized, we can expect that there will likely be a "good" solution that works for both tasks near the one found for the first task (= not all parameters are "really important").
+Then, we save the optimal weight values for the first task (the squared penalty will be relative to these), and also compute the Fisher diagonal from the first dataset.
+During the second training round, we are using an augmented cost function with an additional penalty term defined as in the paper.
 
-### Fisher information matrix
+## Future work
 
-
+- Parallelize computation of the Fisher diagonal for speed. See *stokesj*'s implementation for reference.
+- Test overlap of Fisher information, like in the paper.
+- Teach the network contradictory datasets and see how that affects performance (e.g. instead of permutations of the MNIST dataset, take "inverted" images).
+- Define a way to train beyond the second dataset.
 
 ## Links
 
 - [TensorFlow and Deep Learning, Without a PhD](https://codelabs.developers.google.com/codelabs/cloud-tensorflow-mnist/#0)
 - [Another TensorFlow EWC implementation on GitHub by James Stokes](https://github.com/stokesj/EWC)
-- [One more TensorFlow EWC implementation on GitHub by ariseff](https://github.com/ariseff/overcoming-catastrophic)
+- [Overcoming catastrophic forgetting in neural networks. *Kirkpatrick et al., 2016.*](https://arxiv.org/pdf/1612.00796.pdf)
