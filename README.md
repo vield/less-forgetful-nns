@@ -41,8 +41,13 @@ To generate additional datasets, fixed permutations are applied to the data.
 
 #### Example
 
-![A figure seven from the dataset](seven.png)
-![The same figure permuted](seven_permuted.png)
+A figure seven(?) from the original MNIST dataset.
+
+<img height="250" width="250" src="seven.png" alt="A figure seven from the dataset" />
+
+The same figure permuted randomly to create a new dataset of equal complexity.
+
+<img height="250" width="250" src="seven_permuted.png" alt="The same figure seven with the pixels in random order" />
 
 ### Neural network
 
