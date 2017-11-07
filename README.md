@@ -1,5 +1,7 @@
 # Less Forgetful Neural Networks Using Elastic Weight Consolidation
 
+![Accuracy on two dataset with different training scenarios.](sequential-and-mixed-and-ewc.png)
+
 This work is based on a DeepMind paper ([Kirkpatrick et al., 2016](https://arxiv.org/pdf/1612.00796.pdf)).
 
 **Problem.** When training a neural network sequentially to perform multiple different tasks, the first tasks will be overwritten by the latter (in that the weights in the network are "repurposed" to better fit the latter tasks, and no longer represent what was originally learnt for the first task). This is referred to as catastrophic forgetting.
