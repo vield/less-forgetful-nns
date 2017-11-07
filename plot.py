@@ -10,8 +10,12 @@ Data = namedtuple("Data", ["filename", "title"])
 
 
 if __name__ == "__main__":
+
+    # Use seaborn default styles
     sns.set()
 
+    # The main.py script automatically logs results in these files
+    # depending on the mode used
     data = [
         Data("simple.csv", "Sequential training"),
         Data("mixed.csv", "Training with the full dataset"),
@@ -24,6 +28,11 @@ if __name__ == "__main__":
     axes = []
     dfs = []
 
+    # Stacked plots that show how accuracy on each trained group changes
+    # as training progresses.
+    # Data from both training sessions is included in the case of
+    # sequential training (it will be obvious from the plot when we started
+    # training on the second dataset).
     for i in range(len(data)):
         axes.append(fig.add_subplot(total_plots, 1, i+1))
         ax = axes[-1]
@@ -40,8 +49,11 @@ if __name__ == "__main__":
         ax.set_xlabel('Batch')
         ax.set_ylabel('Accuracy')
 
+        # Format accuracy as percentages ... as it turns out, that's a built-in
+        # now in the new formatting mini language
         ax.yaxis.set_major_formatter(FuncFormatter(lambda y, _: '{:.0%}'.format(y)))
 
+    # Prevent subfigure labels etc from being covered by other things
     plt.tight_layout()
 
     plt.show()
