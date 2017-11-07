@@ -43,3 +43,4 @@ The expected result is that the performance on the first dataset will remain muc
 
 - [TensorFlow and Deep Learning, Without a PhD](https://codelabs.developers.google.com/codelabs/cloud-tensorflow-mnist/#0)
 - [Another TensorFlow EWC implementation on GitHub by James Stokes](https://github.com/stokesj/EWC)
+- [One more TensorFlow EWC implementation on GitHub by ariseff](https://github.com/ariseff/overcoming-catastrophic)
