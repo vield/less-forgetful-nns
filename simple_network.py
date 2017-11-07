@@ -51,73 +51,71 @@ class EWCNetwork(Network):
 
         # Has the same shape as var list; starts out as zero
         # That is, there is one "diagonal" value for each weight/bias variable
-        self.fisher_diagonal = None
-        self.reset_fisher_diagonal()
+        self.fisher_diagonal = []
+        for i in range(len(self.var_list)):
+            self.fisher_diagonal.append(
+                tf.Variable(
+                    tf.constant(0.0, shape=self.var_list[i].shape),
+                    trainable=False)
+            )
 
         self.ewc_penalty = 0.0
         self.fisher_coeff = 0.0
 
-        self.old_var_list = None
-
-    def reset_fisher_diagonal(self):
-        """Set self.fisher_diagonal to all zeroes in the shape of var_list."""
-        self.fisher_diagonal = []
-        for i in range(len(self.var_list)):
-            self.fisher_diagonal.append(np.zeros(self.var_list[i].shape))
-
-    def compute_fisher(self, sess, dataset, num_samples=200):
-        num_examples = dataset.images.shape[0]
-        self.reset_fisher_diagonal()
-
-        class_probs = tf.nn.softmax(self.outputs)
-        sample_class = tf.to_int32(tf.multinomial(tf.log(class_probs), 1)[0][0])
-
-        for i in range(num_samples):
-            # Select random image from dataset
-            random_index = np.random.randint(num_examples)
-            feed_dict = {
-                self.inputs: dataset.images[random_index:random_index+1]
-            }
-
-            # Sample class for this image from the output distribution
-            # Then consider the probability that the example is in that class (given the var_list)
-            # Compute the gradient (for the above probability function wrt each var in the var_list)
-            prob_for_sample_class = class_probs[0, sample_class]
-            grad = sess.run(
-                tf.gradients(
-                    tf.log(prob_for_sample_class),
-                    self.var_list
-                ),
-                feed_dict=feed_dict
-            )
-
-            # Add squared gradients to total
-            for i in range(len(self.fisher_diagonal)):
-                self.fisher_diagonal[i] += np.square(grad[i])
-
-        # Average to get (approximate) expected value
-        for i in range(len(self.fisher_diagonal)):
-            self.fisher_diagonal[i] /= num_samples
-
-    def save_current_vars(self):
         self.old_var_list = []
         for i in range(len(self.var_list)):
-            self.old_var_list.append(self.var_list[i].eval())
+            self.old_var_list.append(
+                tf.Variable(
+                    tf.constant(0.0, shape=self.var_list[i].shape),
+                    trainable=False
+                )
+            )
+
+    def update_fisher_diagonal(self, sess, dataset):
+        dataset._index_in_epoch = 0  # ensures that all training examples are included without repetitions
+        num_samples = 100  # FIXME -- Do not run on full dataset (yet) for speed
+
+        # Reset Fisher diagonal values to zero
+        sess.run([tf.assign(tensor, tf.zeros_like(tensor)) for tensor in self.fisher_diagonal])
+
+        # Add them up
+        print("adding up fisher diagonal")
+        for i in range(num_samples):
+            inputs, correct_labels = dataset.next_batch(1)
+            #print("inputs, correct_labels")
+            #print(inputs.shape, correct_labels.shape)
+            # log probs
+            log_likelihood = tf.reduce_sum(self.correct_labels * tf.nn.log_softmax(self.outputs))
+            #print("log likelihood")
+            #print(log_likelihood)
+            # gradients
+            grads = tf.gradients(log_likelihood, self.var_list)
+            #print("gradients")
+            #print(grads)
+            # square them
+            squared_gradients = [tf.square(grad) for grad in grads]
+            #print("squared gradients")
+            #print(squared_gradients)
+
+            sums_of_squared_gradients = [tf.assign_add(f1, f2) for f1, f2 in zip(self.fisher_diagonal, squared_gradients)]
+            #print("sums of squared gradients")
+            #print(sums_of_squared_gradients)
+
+            sess.run(sums_of_squared_gradients,
+                     feed_dict={self.inputs: inputs, self.correct_labels: correct_labels})
+        print("done")
+        # Compute averages
+        scale = 1.0 / num_samples
+        sess.run([tf.assign(var, tf.multiply(scale, var)) for var in self.fisher_diagonal])
+
+        # Save old vars
+        sess.run([v1.assign(v2) for v1, v2 in zip(self.old_var_list, self.var_list)])
 
     def set_train_step(self, fisher_coeff=None):
-        super().set_train_step()
-
-        if fisher_coeff:
-            self.fisher_coeff = fisher_coeff
-            self.ewc_penalty = 0.0
-
-            for i in range(len(self.var_list)):
-                self.ewc_penalty += tf.reduce_sum(
-                    tf.multiply(
-                        self.fisher_diagonal[i].astype(np.float32),  # Types need to match
-                        tf.square(self.var_list[i] - self.old_var_list[i])
-                    )
-                )
-
-            ewc_cost = self.cost + (fisher_coeff / 2) * self.ewc_penalty
-            self.train_step = tf.train.GradientDescentOptimizer(0.5).minimize(ewc_cost)
+        if not fisher_coeff:
+            super().set_train_step()
+        else:
+            penalty = tf.add_n([tf.reduce_sum(tf.square(tf.subtract(w1, w2)) * f) for w1, w2, f
+                                in zip(self.var_list, self.old_var_list, self.fisher_diagonal)])
+            self.ewc_penalty = (fisher_coeff / 2) * penalty
+            self.train_step = tf.train.GradientDescentOptimizer(0.5).minimize(self.cost + self.ewc_penalty)

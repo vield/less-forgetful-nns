@@ -13,7 +13,8 @@ def run_training(network, sess, training_datasets, evaluation_datasets, options,
 
         epoch = 0
 
-        for data in training_datasets:
+        for i in range(len(training_datasets)):
+            data = training_datasets[i]
             total = 1000
             for i in range(total):
                 batch_xs, batch_ys = data.train.next_batch(100)
@@ -34,9 +35,8 @@ def run_training(network, sess, training_datasets, evaluation_datasets, options,
                     if verbose:
                         print(" ".join("{:.5f}".format(acc) for acc in test_accuracies))
             epoch += total
-            if options.mode == 'ewc':
-                network.save_current_vars()
-                network.compute_fisher(sess, dataset=data.validation)
+            if options.mode == 'ewc' and i != len(training_datasets) - 1:
+                network.update_fisher_diagonal(sess, dataset=data.train)
                 network.set_train_step(fisher_coeff=10)
 
 
