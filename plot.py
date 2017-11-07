@@ -18,18 +18,6 @@ if __name__ == "__main__":
         Data("ewc.csv", "With EWC")
     ]
 
-    simple_df = pd.read_csv('simple.csv')
-    group1 = simple_df[simple_df['Group'] == 1]
-    group2 = simple_df[simple_df['Group'] == 2]
-
-    mixed_df = pd.read_csv('mixed.csv')
-    mixed1 = mixed_df[mixed_df['Group'] == 1]
-    mixed2 = mixed_df[mixed_df['Group'] == 2]
-
-    ewc_df = pd.read_csv('ewc.csv')
-    ewc1 = ewc_df[ewc_df['Group'] == 1]
-    ewc2 = ewc_df[ewc_df['Group'] == 2]
-
     fig = plt.figure()
 
     total_plots = len(data)
