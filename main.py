@@ -56,7 +56,7 @@ def main(options):
     import tensorflow as tf
 
     from data import get_dataset_permutations, merge_datasets
-    from simple_network import Network, EWCNetwork
+    from network import Network, EWCNetwork
 
     permuted_datasets = get_dataset_permutations(options.data_dir, options.permutations)
 
