@@ -18,9 +18,9 @@ The *accuracy* (ratio of correctly classified examples in the validation set) on
 
 ### Some less satisfactory approaches...
 
-One way to avoid catastrophic forgetting is to ensure that all training data is available at the start.
+One way to avoid catastrophic forgetting is to **ensure that all training data is available at the start**.
 
-Alternatively, we could be storing (parts of) previously learned data so it can periodically be replayed to the network as it learns other tasks.
+Alternatively, we could be **storing (parts of) previously learned data so it can periodically be replayed to the network** as it learns other tasks.
 
 The second graph from the top shows a network with the same structure as the first one, trained using the same data.
 The only difference here is that the two datasets are shuffled together at the start of the training, so the network learns weights that work with both.
@@ -37,7 +37,7 @@ The solution is inspired by an observation about mammalian brains.
 As animals learn new tasks, the related synapses in the brain are strengthened, making them less plastic and thus less likely to be overwritten.
 
 The idea translates to artificial neural networks as follows:
-we slow down reassignment in weights that have been identified to be important for previous tasks.
+we **slow down reassignment in weights that have been identified to be important** for previous tasks.
 This is something of a Bayesian approach: we have prior information about the values of the weights and how certain we are about those values.
 
 In practice, there is a quadratic penalty added to the cost function for moving the weights from their original positions.
@@ -77,7 +77,7 @@ The network is a fully connected "traditional MLP" with two hidden layers.
 
 The weight optimization uses stochastic gradient descent.
 
-The whole thing is implemented using [TensorFlow](https://www.tensorflow.org/).
+The whole thing is implemented using [**TensorFlow**](https://www.tensorflow.org/).
 
 This also happens to be my first project using TensorFlow.
 I found [this tutorial](https://codelabs.developers.google.com/codelabs/cloud-tensorflow-mnist/#0) a useful resource for setting things up. :)
