@@ -1,121 +1,126 @@
-import numpy as np
 import tensorflow as tf
 
 
 class Network:
 
-    def __init__(self):
-        hidden1 = 100
-        hidden2 = 100
+    def __init__(self, learning_rate=0.5, *args, **kwargs):
+        """Initialize a classification network for the MNIST dataset.
 
-        # Inputs
-        self.inputs = tf.placeholder(tf.float32, [None, 784])
+        There's an attempt to make a distinction between internal variables
+        and the external API: any functions and attributes not starting with
+        an underscore are the ones you're meant to be interfacing with.
 
-        # Hidden layer 1
-        W1 = tf.Variable(tf.truncated_normal([784, hidden1], stddev=0.1))
-        b1 = tf.Variable(tf.truncated_normal([hidden1], stddev=0.1))
-        y1 = tf.nn.relu(tf.matmul(self.inputs, W1) + b1)
+        This is mainly just to make the project code easier to read (you can
+        skim over the internal details). :)
 
-        # Hidden layer 2
-        W2 = tf.Variable(tf.truncated_normal([hidden1, hidden2], stddev=0.1))
-        b2 = tf.Variable(tf.truncated_normal([hidden2], stddev=0.1))
-        y2 = tf.nn.relu(tf.matmul(y1, W2) + b2)
+        Parameters
+        ----------
+            learning_rate : float
+                Learning rate to pass to the optimizer.
+        """
+        #
+        #
+        # Placeholder variables to feed data into
+        self.inputs = tf.placeholder(tf.float32, [None, 784], name="Inputs")
+        self.correct_labels = tf.placeholder(tf.float32, [None, 10], name="CorrectLabels")
 
-        # Output layer
-        W3 = tf.Variable(tf.truncated_normal([hidden2, 10], stddev=0.1))
-        b3 = tf.Variable(tf.truncated_normal([10], stddev=0.1))
-        self.outputs = tf.matmul(y2, W3) + b3
+        # Gives a single number instead of the one-hot representation we
+        # expect as input
+        self._correct_labels_as_numbers = tf.argmax(self.correct_labels, axis=1, name="CorrectLabelsAsNumbers")
 
-        self.var_list = [W1, b1, W2, b2, W3, b3]
-
-        self.correct_labels = tf.placeholder(tf.float32, [None, 10])
-
-        self.cost = None
-        self.train_step = None
-        self.set_train_step()
-
-        correct_prediction = tf.equal(tf.argmax(self.outputs, 1), tf.argmax(self.correct_labels, 1))
-        self.accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
-
-    def set_train_step(self):
-        self.cost = tf.reduce_mean(
-            tf.nn.softmax_cross_entropy_with_logits(labels=self.correct_labels, logits=self.outputs)
+        #
+        #
+        # Create network architecture
+        self._biases, self._weights, self._raw_outputs = self._create_network_architecture(
+            inputs=self.inputs,
+            nodes_per_layer=[784, 100, 100, 10]
         )
-        self.train_step = tf.train.GradientDescentOptimizer(0.5).minimize(self.cost)
+        self._var_list = self._biases + self._weights
+
+        # "Soft" classification outputs are the softmax probabilities
+        # for each input to be from a particular class, e.g. for a number
+        # six we could see something like this in the output:
+        #    0    1    2    3    4    5    6    7    8    9
+        # [0.0, 0.0, 0.0, 0.0, 0.0, 0.2, 0.7, 0.0, 0.1, 0.0]
+        self._soft_classification_outputs = tf.nn.softmax(self._raw_outputs, name="SoftClassificationOutputs")
+        # "Hard" classification outputs are just a single number for
+        # each input, representing the class the network thinks the number
+        # most likely belongs to (e.g. "6").
+        self._classification_outputs = tf.argmax(self._raw_outputs, axis=1, name="ClassificationOutputs")
+
+        #
+        #
+        # Initialize evaluation
+        _correct_prediction = tf.equal(
+            self._classification_outputs,
+            self._correct_labels_as_numbers
+        )
+        # Ratio of correct classifications out of all classifications
+        # (currently the only metric this class offers).
+        self._accuracy = tf.reduce_mean(tf.cast(_correct_prediction, tf.float32), name="Accuracy")
+
+        #
+        #
+        # Initialize learning
+        self._optimizer = tf.train.GradientDescentOptimizer(learning_rate=learning_rate)
+
+        self._cross_entropy = tf.reduce_mean(
+            tf.nn.softmax_cross_entropy_with_logits(labels=self.correct_labels, logits=self._raw_outputs)
+        )
+        self._train_step = self._optimizer.minimize(self._cross_entropy)
+
+    def run_one_step_of_training(self, sess, feed_dict):
+        assert self.inputs in feed_dict
+        assert self.correct_labels in feed_dict
+
+        return sess.run(self._train_step, feed_dict=feed_dict)
+
+    def compute_accuracy(self, sess, feed_dict):
+        assert self.inputs in feed_dict
+        assert self.correct_labels in feed_dict
+
+        return sess.run(self._accuracy, feed_dict=feed_dict)
+
+    #
+    #
+    # Helper functions
+
+    def _create_network_architecture(self, inputs, nodes_per_layer):
+        input_layer = nodes_per_layer[0]
+        hidden_layers = nodes_per_layer[1:-1]
+        output_layer = nodes_per_layer[-1]
+
+        biases = []
+        weights =[]
+
+        prev = inputs
+        for i in range(1, len(nodes_per_layer)-1):
+            num_in = nodes_per_layer[i-1]
+            num_out = nodes_per_layer[i]
+            W = tf.Variable(tf.truncated_normal([num_in, num_out], stddev=0.1))
+            b = tf.Variable(tf.truncated_normal([num_out], stddev=0.1))
+
+            weights.append(W)
+            biases.append(b)
+
+            y = tf.nn.relu(tf.matmul(prev, W) + b)
+            prev = y
+
+        # Last layer
+        # The difference is that we don't apply the activation function
+        W = tf.Variable(tf.truncated_normal([nodes_per_layer[-2], nodes_per_layer[-1]], stddev=0.1))
+        b = tf.Variable(tf.truncated_normal([nodes_per_layer[-1]], stddev=0.1))
+
+        weights.append(W)
+        biases.append(b)
+
+        outputs = tf.matmul(prev, W) + b
+
+        return biases, weights, outputs
 
 
 class EWCNetwork(Network):
 
-    def __init__(self):
-        super().__init__()
-
-        # Has the same shape as var list; starts out as zero
-        # That is, there is one "diagonal" value for each weight/bias variable
-        self.fisher_diagonal = []
-        for i in range(len(self.var_list)):
-            self.fisher_diagonal.append(
-                tf.Variable(
-                    tf.constant(0.0, shape=self.var_list[i].shape),
-                    trainable=False)
-            )
-
-        self.ewc_penalty = 0.0
-        self.fisher_coeff = 0.0
-
-        self.old_var_list = []
-        for i in range(len(self.var_list)):
-            self.old_var_list.append(
-                tf.Variable(
-                    tf.constant(0.0, shape=self.var_list[i].shape),
-                    trainable=False
-                )
-            )
-
-    def update_fisher_diagonal(self, sess, dataset):
-        dataset._index_in_epoch = 0  # ensures that all training examples are included without repetitions
-        num_samples = 100  # FIXME -- Do not run on full dataset (yet) for speed
-
-        # Reset Fisher diagonal values to zero
-        sess.run([tf.assign(tensor, tf.zeros_like(tensor)) for tensor in self.fisher_diagonal])
-
-        # Add them up
-        print("adding up fisher diagonal")
-        for i in range(num_samples):
-            inputs, correct_labels = dataset.next_batch(1)
-            #print("inputs, correct_labels")
-            #print(inputs.shape, correct_labels.shape)
-            # log probs
-            log_likelihood = tf.reduce_sum(self.correct_labels * tf.nn.log_softmax(self.outputs))
-            #print("log likelihood")
-            #print(log_likelihood)
-            # gradients
-            grads = tf.gradients(log_likelihood, self.var_list)
-            #print("gradients")
-            #print(grads)
-            # square them
-            squared_gradients = [tf.square(grad) for grad in grads]
-            #print("squared gradients")
-            #print(squared_gradients)
-
-            sums_of_squared_gradients = [tf.assign_add(f1, f2) for f1, f2 in zip(self.fisher_diagonal, squared_gradients)]
-            #print("sums of squared gradients")
-            #print(sums_of_squared_gradients)
-
-            sess.run(sums_of_squared_gradients,
-                     feed_dict={self.inputs: inputs, self.correct_labels: correct_labels})
-        print("done")
-        # Compute averages
-        scale = 1.0 / num_samples
-        sess.run([tf.assign(var, tf.multiply(scale, var)) for var in self.fisher_diagonal])
-
-        # Save old vars
-        sess.run([v1.assign(v2) for v1, v2 in zip(self.old_var_list, self.var_list)])
-
-    def set_train_step(self, fisher_coeff=None):
-        if not fisher_coeff:
-            super().set_train_step()
-        else:
-            penalty = tf.add_n([tf.reduce_sum(tf.square(tf.subtract(w1, w2)) * f) for w1, w2, f
-                                in zip(self.var_list, self.old_var_list, self.fisher_diagonal)])
-            self.ewc_penalty = (fisher_coeff / 2) * penalty
-            self.train_step = tf.train.GradientDescentOptimizer(0.5).minimize(self.cost + self.ewc_penalty)
+    def __init__(self, learning_rate=None, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        raise NotImplementedError("EWC Network not implemented yet!")

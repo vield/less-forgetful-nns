@@ -1,90 +1,83 @@
 import argparse
-from copy import deepcopy
 import csv
 
-import numpy as np
 
+def run_training(sess, network, training_datasets, evaluation_datasets, options, verbose=True):
+    filename = options.mode + '.csv'
+    with open(filename, 'w') as f:
+        if verbose:
+            print("Saving results into " + filename)
 
-def run_training(network, sess, training_datasets, evaluation_datasets, options, verbose=True):
-    with open(options.mode + '.csv', 'w') as f:
+        # FIXME: "Epoch" is actually "Batch"
+        # Need to change in the plotting code and then re-run all experiments with final settings
         fieldnames = ["Epoch", "Group", "TestAccuracy"]
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
 
-        epoch = 0
+        batch = 0
 
         for i in range(len(training_datasets)):
             data = training_datasets[i]
             total = 1000
+
             for i in range(total):
                 batch_xs, batch_ys = data.train.next_batch(100)
-                sess.run(network.train_step, feed_dict={network.inputs: batch_xs, network.correct_labels: batch_ys})
 
-                test_accuracies = []
+                feed_dict = {
+                    network.inputs: batch_xs,
+                    network.correct_labels: batch_ys
+                }
+
+                network.run_one_step_of_training(sess, feed_dict=feed_dict)
+
                 if i % 50 == 0:
+                    accuracy_results = []
+
                     for j in range(len(evaluation_datasets)):
-                        test_accuracy = sess.run(
-                            network.accuracy,
-                            feed_dict={
-                                network.inputs: evaluation_datasets[j].test.images,
-                                network.correct_labels: evaluation_datasets[j].test.labels
-                            }
-                        )
-                        test_accuracies.append(test_accuracy)
-                        writer.writerow({'Epoch': i + epoch, 'TestAccuracy': test_accuracy, 'Group': j+1})
+                        feed_dict = {
+                            network.inputs: evaluation_datasets[j].validation.images,
+                            network.correct_labels: evaluation_datasets[j].validation.labels
+                        }
+                        accuracy = network.compute_accuracy(sess, feed_dict=feed_dict)
+                        accuracy_results.append(accuracy)
+
+                        writer.writerow({'Epoch': i + batch, 'TestAccuracy': accuracy, 'Group': j+1})
+
                     if verbose:
-                        print(" ".join("{:.5f}".format(acc) for acc in test_accuracies))
-            epoch += total
-            if options.mode == 'ewc' and i != len(training_datasets) - 1:
-                network.update_fisher_diagonal(sess, dataset=data.train)
-                network.set_train_step(fisher_coeff=10)
+                        print(" ".join("{:.5f}".format(acc) for acc in accuracy_results))
+
+            # Different datasets are chained for graphing purposes
+            batch += total
+
+            # FIXME: Update Fisher diagonal if running in EWC mode and if this is not the last training dataset
 
 
 def main(options):
-    from tensorflow.examples.tutorials.mnist import input_data
     import tensorflow as tf
 
+    from data import get_dataset_permutations, merge_datasets
     from simple_network import Network, EWCNetwork
 
-    mnist = input_data.read_data_sets(options.data_dir, one_hot=True)
+    permuted_datasets = get_dataset_permutations(options.data_dir, options.permutations)
 
-    np.random.seed(1)
-    perm = np.random.permutation(mnist.train._images.shape[1])
-    permuted = deepcopy(mnist)
-    permuted.train._images = permuted.train._images[:, perm]
-    permuted.test._images = permuted.test._images[:, perm]
-    permuted.validation._images = permuted.validation._images[:, perm]
-
-    combined = deepcopy(mnist)
-    combined.train._images = np.concatenate((mnist.train._images, permuted.train._images))
-    combined.train._labels = np.concatenate((mnist.train._labels, permuted.train._labels))
-    combined.train._num_examples *= 2
-    combined.test._images = np.concatenate((mnist.test._images, permuted.test._images))
-    combined.test._labels = np.concatenate((mnist.test._labels, permuted.test._labels))
-    combined.test._num_examples *= 2
-    combined.validation._images = np.concatenate((mnist.validation._images, permuted.validation._images))
-    combined.validation._labels = np.concatenate((mnist.validation._labels, permuted.validation._labels))
-    combined.validation._num_examples *= 2
-
+    evaluation_datasets = permuted_datasets  # Same for all of them
     if options.mode == 'simple':
         network = Network()
-        training_datasets = [mnist, permuted]
-        evaluation_datasets = [mnist, permuted]
+        training_datasets = permuted_datasets
     elif options.mode == 'mixed':
         network = Network()
-        training_datasets = [combined, combined]
-        evaluation_datasets = [mnist, permuted]
+        combined = merge_datasets(permuted_datasets)
+        training_datasets = (combined, combined)
     elif options.mode == 'ewc':
         network = EWCNetwork()
-        training_datasets = [mnist, permuted]
-        evaluation_datasets = [mnist, permuted]
+        training_datasets = permuted_datasets
     else:
         raise Exception("Unrecognized mode: " + options.mode)
 
     sess = tf.InteractiveSession()
     tf.global_variables_initializer().run()
 
-    run_training(network, sess, training_datasets, evaluation_datasets, options)
+    run_training(sess, network, training_datasets, evaluation_datasets, options)
 
 
 if __name__ == '__main__':
@@ -94,5 +87,7 @@ if __name__ == '__main__':
     parser.add_argument('--mode', type=str, default="simple", choices=('simple', 'mixed', 'ewc'))
 
     options = parser.parse_args()
+    # Only two datasets are supported at this time.
+    options.permutations = 2
 
     main(options)
