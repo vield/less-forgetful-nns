@@ -39,11 +39,12 @@ if __name__ == "__main__":
 
         dfs.append(pd.read_csv(data[i].filename))
         df = dfs[-1]
-        group1 = df[df['Group'] == 1]
-        group2 = df[df['Group'] == 2]
 
-        ax.plot(group1['Epoch'], group1['TestAccuracy'])
-        ax.plot(group2['Epoch'], group2['TestAccuracy'])
+        group_numbers = sorted(df['Group'].unique())
+
+        for num in group_numbers:
+            group = df[df['Group'] == num]
+            ax.plot(group['Epoch'], group['TestAccuracy'])
 
         ax.set_title(data[i].title)
         ax.set_xlabel('Batch')

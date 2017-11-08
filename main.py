@@ -87,7 +87,7 @@ if __name__ == '__main__':
     parser.add_argument('--mode', type=str, default="simple", choices=('simple', 'mixed', 'ewc'))
 
     options = parser.parse_args()
-    # Only two datasets are supported at this time.
+    
     options.permutations = 2
 
     main(options)
