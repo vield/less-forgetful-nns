@@ -94,8 +94,8 @@ class Network:
         for i in range(1, len(nodes_per_layer)-1):
             num_in = nodes_per_layer[i-1]
             num_out = nodes_per_layer[i]
-            W = tf.Variable(tf.truncated_normal([num_in, num_out], stddev=0.1))
-            b = tf.Variable(tf.truncated_normal([num_out], stddev=0.1))
+            W = tf.Variable(tf.truncated_normal([num_in, num_out], stddev=0.1), name="Weights" + str(i))
+            b = tf.Variable(tf.truncated_normal([num_out], stddev=0.1), name="Biases" + str(i))
 
             weights.append(W)
             biases.append(b)
@@ -103,21 +103,32 @@ class Network:
             y = tf.nn.relu(tf.matmul(prev, W) + b)
             prev = y
 
-        # Last layer
-        # The difference is that we don't apply the activation function
-        W = tf.Variable(tf.truncated_normal([nodes_per_layer[-2], nodes_per_layer[-1]], stddev=0.1))
-        b = tf.Variable(tf.truncated_normal([nodes_per_layer[-1]], stddev=0.1))
+        # Last layer.
+        # The difference is that we don't apply the ReLU activation function.
+        # The softmax application function is applied later for optimization
+        # and for exact classification, we just look at the order of the values.
+        layer_idx = str(len(nodes_per_layer)-1)
+
+        W = tf.Variable(tf.truncated_normal([nodes_per_layer[-2], nodes_per_layer[-1]], stddev=0.1), name="Weights" + layer_idx)
+        b = tf.Variable(tf.truncated_normal([nodes_per_layer[-1]], stddev=0.1), name="Biases" + layer_idx)
 
         weights.append(W)
         biases.append(b)
 
-        outputs = tf.matmul(prev, W) + b
+        outputs = tf.add(tf.matmul(prev, W), b, name="RawOutputs")
 
         return biases, weights, outputs
 
 
 class EWCNetwork(Network):
+    """Network with Elastic Weight Consolidation capabilities.
 
-    def __init__(self, learning_rate=None, *args, **kwargs):
+    Note that to use the special cost function, you have to tell
+    the network to save the old weight/bias values and to compute
+    the Fisher diagonal."""
+
+    def __init__(self, fisher_coeff=10, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+        self.fisher_coeff = fisher_coeff
         raise NotImplementedError("EWC Network not implemented yet!")

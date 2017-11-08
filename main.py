@@ -1,83 +1,49 @@
 import argparse
 import csv
 
+from setup import TrainingSetup
 
-def run_training(sess, network, training_datasets, evaluation_datasets, options, verbose=True):
-    filename = options.mode + '.csv'
-    with open(filename, 'w') as f:
-        if verbose:
-            print("Saving results into " + filename)
 
-        # FIXME: "Epoch" is actually "Batch"
-        # Need to change in the plotting code and then re-run all experiments with final settings
+def run_training(sess, setup, options):
+    """Run experiment, sampling accuracy at fixed intervals."""
+
+    with open(options.filename, 'w') as f:
         fieldnames = ["Epoch", "Group", "TestAccuracy"]
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
 
-        batch = 0
+        batches_completed = 0
 
-        for i in range(len(training_datasets)):
-            data = training_datasets[i]
-            total = 1000
+        while setup.batches_left > 0:
+            setup.train_batch(sess)
 
-            for i in range(total):
-                batch_xs, batch_ys = data.train.next_batch(100)
+            if batches_completed % options.log_frequency == 0:
 
-                feed_dict = {
-                    network.inputs: batch_xs,
-                    network.correct_labels: batch_ys
-                }
+                accuracy_results = setup.check_accuracy(sess)
+                for i in range(len(accuracy_results)):
+                    writer.writerow({'Epoch': batches_completed, 'TestAccuracy': accuracy_results[i], 'Group': i+1})
 
-                network.run_one_step_of_training(sess, feed_dict=feed_dict)
+                if options.verbose:
+                    # Print current accuracy on all datasets.
+                    # E.g.
+                    # 0.95432  0.09800  0.10999
+                    # means that the accuracy is 95.4% on the first dataset, and
+                    # roughly equivalent to random guessing on the latter two.
+                    print("  ".join("{:.5f}".format(acc) for acc in accuracy_results))
 
-                if i % 50 == 0:
-                    accuracy_results = []
-
-                    for j in range(len(evaluation_datasets)):
-                        feed_dict = {
-                            network.inputs: evaluation_datasets[j].validation.images,
-                            network.correct_labels: evaluation_datasets[j].validation.labels
-                        }
-                        accuracy = network.compute_accuracy(sess, feed_dict=feed_dict)
-                        accuracy_results.append(accuracy)
-
-                        writer.writerow({'Epoch': i + batch, 'TestAccuracy': accuracy, 'Group': j+1})
-
-                    if verbose:
-                        print(" ".join("{:.5f}".format(acc) for acc in accuracy_results))
-
-            # Different datasets are chained for graphing purposes
-            batch += total
-
-            # FIXME: Update Fisher diagonal if running in EWC mode and if this is not the last training dataset
+            batches_completed += 1
 
 
 def main(options):
+    # Conditional import so `main.py --help` stays fast
     import tensorflow as tf
 
-    from data import get_dataset_permutations, merge_datasets
-    from network import Network, EWCNetwork
-
-    permuted_datasets = get_dataset_permutations(options.data_dir, options.permutations)
-
-    evaluation_datasets = permuted_datasets  # Same for all of them
-    if options.mode == 'simple':
-        network = Network()
-        training_datasets = permuted_datasets
-    elif options.mode == 'mixed':
-        network = Network()
-        combined = merge_datasets(permuted_datasets)
-        training_datasets = (combined, combined)
-    elif options.mode == 'ewc':
-        network = EWCNetwork()
-        training_datasets = permuted_datasets
-    else:
-        raise Exception("Unrecognized mode: " + options.mode)
+    setup = TrainingSetup(options)
 
     sess = tf.InteractiveSession()
     tf.global_variables_initializer().run()
 
-    run_training(sess, network, training_datasets, evaluation_datasets, options)
+    run_training(sess, setup, options)
 
 
 if __name__ == '__main__':
@@ -87,7 +53,19 @@ if __name__ == '__main__':
     parser.add_argument('--mode', type=str, default="simple", choices=('simple', 'mixed', 'ewc'))
 
     options = parser.parse_args()
-    
+
+    # ...could be made configurable later... for now, we have some
+    # pseudoparameters here so they're easier to pass around
     options.permutations = 2
+    options.batch_size = 100
+    options.num_batches = 1000
+    options.log_frequency = 50
+    options.filename = options.mode + '.csv'
+    options.verbose = True
+    if options.mode == 'mixed':
+        # The datasets will be combined, so for fairness we will let
+        # the experiment run for as long as the sequential ones.
+        # Plus, it makes the plots line up nicer.
+        options.num_batches *= options.permutations
 
     main(options)
