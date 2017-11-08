@@ -138,6 +138,8 @@ During the second training round, we are using an augmented cost function with a
 
 - [**TensorFlow and Deep Learning, Without a PhD.**](https://codelabs.developers.google.com/codelabs/cloud-tensorflow-mnist/#0) A good tutorial for those just starting out with TensorFlow, in my opinion. Shows how to set up a network (very similar to the one used in the original experiments for the paper) for the task, and how to improve its performance.
 - [**Another TensorFlow EWC implementation on GitHub by *James Stokes*.**](https://github.com/stokesj/EWC)
+- [**Comment on *Overcoming catastrophic forgetting in neural networks*. Are multiple penalties needed? by *Ferenc Huszár***](http://www.inference.vc/comment-on-overcoming-catastrophic-forgetting-in-nns-are-multiple-penalties-needed-2/)
+- [**Explanation of *Overcoming catastrophic forgetting in neural networks* by *Rylan Schaeffer***](https://rylanschaeffer.github.io/content/research/overcoming_catastrophic_forgetting/main.html)
 
 ## References
 
