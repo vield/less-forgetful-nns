@@ -86,9 +86,6 @@ class Network:
     # Helper functions
 
     def _create_network_architecture(self, inputs, nodes_per_layer):
-        input_layer = nodes_per_layer[0]
-        hidden_layers = nodes_per_layer[1:-1]
-        output_layer = nodes_per_layer[-1]
 
         biases = []
         weights =[]
