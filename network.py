@@ -1,5 +1,7 @@
 import tensorflow as tf
 
+from fisher import FisherDiagonalMixin
+
 
 class Network:
 
@@ -31,9 +33,10 @@ class Network:
         #
         #
         # Create network architecture
+        self._nodes_per_layer = [784, 100, 100, 10]  # Currently not configurable
         self._biases, self._weights, self._raw_outputs = self._create_network_architecture(
             inputs=self.inputs,
-            nodes_per_layer=[784, 100, 100, 10]
+            nodes_per_layer=self._nodes_per_layer
         )
         self._var_list = self._biases + self._weights
 
@@ -85,20 +88,81 @@ class Network:
     #
     # Helper functions
 
+    def _create_bias_shaped_variables(self, nodes_per_layer, mean=None, stddev=None, name_prefix="Biases", trainable=True):
+        """Does what it says on the tin.
+
+        Parameters
+        ----------
+        nodes_per_layer : list of integers
+            E.g. [784, 100, 100, 10] means that there are 784 features (pixels)
+            coming in, two hidden layers with 100 nodes each, and the output
+            vector has length 10.
+            The bias variables will be created to match this structure.
+        mean : float
+        stddev : float
+            If set to a truthy value, the bias-shaped variable will be initialized
+            from a truncated normal distribution with the given mean (default 0.0)
+            and the stddev. Otherwise, it will be initialized to all zeroes.
+        name_prefix : string
+            Used to name the tensors.
+        trainable : bool
+            Passed into the Variable constructor to make the tensor trainable
+            by default, or not if trainable=False.
+        """
+        biases = []
+
+        for layer_idx in range(1, len(nodes_per_layer)):
+            num_out = nodes_per_layer[layer_idx]
+            shape = [num_out]
+
+            if stddev:
+                initial = tf.truncated_normal(shape=shape, stddev=stddev, mean=mean if mean else 0.0)
+            else:
+                initial = tf.constant(0.0, shape=shape)
+
+            b = tf.Variable(
+                initial,
+                name=name_prefix + str(layer_idx),
+                trainable=trainable
+            )
+            biases.append(b)
+
+        return biases
+
+    def _create_weight_shaped_variables(self, nodes_per_layer, mean=None, stddev=None, name_prefix="Weights", trainable=True):
+        """Same as bias-shaped variables except this is for weights. See other docstring."""
+        weights = []
+
+        for layer_idx in range(1, len(nodes_per_layer)):
+            num_in = nodes_per_layer[layer_idx-1]
+            num_out = nodes_per_layer[layer_idx]
+            shape = [num_in, num_out]
+
+            if stddev:
+                initial = tf.truncated_normal(shape=shape, stddev=stddev, mean=mean if mean else 0.0)
+            else:
+                initial = tf.constant(0.0, shape=shape)
+
+            W = tf.Variable(
+                initial,
+                name=name_prefix + str(layer_idx),
+                trainable=trainable
+            )
+            weights.append(W)
+
+        return weights
+
     def _create_network_architecture(self, inputs, nodes_per_layer):
 
-        biases = []
-        weights =[]
+        biases = self._create_bias_shaped_variables(nodes_per_layer, stddev=0.1)
+        weights = self._create_weight_shaped_variables(nodes_per_layer, stddev=0.1)
+
+        num_hidden_layers = len(nodes_per_layer) - 2
 
         prev = inputs
-        for i in range(1, len(nodes_per_layer)-1):
-            num_in = nodes_per_layer[i-1]
-            num_out = nodes_per_layer[i]
-            W = tf.Variable(tf.truncated_normal([num_in, num_out], stddev=0.1), name="Weights" + str(i))
-            b = tf.Variable(tf.truncated_normal([num_out], stddev=0.1), name="Biases" + str(i))
-
-            weights.append(W)
-            biases.append(b)
+        for layer_idx in range(num_hidden_layers):
+            b = biases[layer_idx]
+            W = weights[layer_idx]
 
             y = tf.nn.relu(tf.matmul(prev, W) + b)
             prev = y
@@ -106,14 +170,12 @@ class Network:
         # Last layer.
         # The difference is that we don't apply the ReLU activation function.
         # The softmax application function is applied later for optimization
-        # and for exact classification, we just look at the order of the values.
+        # and for exact classification, we just look at the magnitudes of the
+        # raw values.
         layer_idx = str(len(nodes_per_layer)-1)
 
-        W = tf.Variable(tf.truncated_normal([nodes_per_layer[-2], nodes_per_layer[-1]], stddev=0.1), name="Weights" + layer_idx)
-        b = tf.Variable(tf.truncated_normal([nodes_per_layer[-1]], stddev=0.1), name="Biases" + layer_idx)
-
-        weights.append(W)
-        biases.append(b)
+        b = biases[-1]
+        W = weights[-1]
 
         outputs = tf.add(tf.matmul(prev, W), b, name="RawOutputs")
 
@@ -127,8 +189,70 @@ class EWCNetwork(Network):
     the network to save the old weight/bias values and to compute
     the Fisher diagonal."""
 
-    def __init__(self, fisher_coeff=10, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.fisher_coeff = fisher_coeff
-        raise NotImplementedError("EWC Network not implemented yet!")
+        # Savepointed versions of self._biases, self._weights and self._var_list
+        self._old_biases = self._create_bias_shaped_variables(
+            self._nodes_per_layer,
+            name_prefix="OldBiases",
+            trainable=False
+        )
+        self._old_weights = self._create_weight_shaped_variables(
+            self._nodes_per_layer,
+            name_prefix="OldWeights",
+            trainable=False
+        )
+        self._old_var_list = self._old_biases + self._old_weights
+
+        # self._var_list, self._old_var_list and self._fisher_diagonal all have
+        # the same shape.
+        # More specifically, they are lists of tensors shaped like
+        # self._biases + self._weights.
+        # They are combined to create the EWC penalty part of the cost function.
+        self._fisher_diagonal = self._create_bias_shaped_variables(
+            self._nodes_per_layer,
+            name_prefix="FisherDiagonalBiases",
+            trainable=False
+        ) + self._create_weight_shaped_variables(
+            self._nodes_per_layer,
+            name_prefix="FisherDiagonalWeights",
+            trainable=False
+        )
+
+        # The "lambda" from the paper.
+        # Sets the relative informance of the EWC penalty vs the new dataset.
+        self._fisher_coeff = tf.Variable(initial_value=0.0, name="FisherCoefficient")
+
+        self._squared_var_distances_scaled_by_fisher = []
+        for var, old_var, fisher in zip(self._var_list, self._old_var_list, self._fisher_diagonal):
+            self._squared_var_distances_scaled_by_fisher.append(
+                tf.multiply(
+                    fisher,
+                    # Hacky way to get the first part of the name
+                    # var.name will give something like "Biases1:0"
+                    # We want "SquaredDistBiases1"
+                    tf.square(tf.subtract(var, old_var), name="SquaredDist" + var.name.split(":")[0])
+                )
+            )
+
+        # Sum of the above
+        self._ewc_penalty = tf.add_n([tf.reduce_sum(svd) for svd in self._squared_var_distances_scaled_by_fisher])
+
+        # (1/2) * lambda * sum of weighted squared distances
+        self._ewc_cost = tf.add(
+            self._cross_entropy,
+            tf.multiply(
+                tf.multiply(self._fisher_coeff, 0.5),
+                self._ewc_penalty),
+            name="EWCCost"
+        )
+
+        self._train_step = self._optimizer.minimize(self._ewc_cost)
+
+    def savepoint_current_vars(self, sess):
+        assignments = []
+        for i in range(len(self._var_list)):
+            assignments.append(tf.assign(self._old_var_list[i], self._var_list[i]))
+
+        sess.run(assignments)
