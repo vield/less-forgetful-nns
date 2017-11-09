@@ -32,9 +32,13 @@ class Network:
         #
         # Create network architecture
         self._nodes_per_layer = [784, 100, 100, 10]  # Currently not configurable
-        self._biases, self._weights, self._raw_outputs = self._create_network_architecture(
+        self._biases = self._create_bias_shaped_variables(self._nodes_per_layer, stddev=0.1)
+        self._weights = self._create_weight_shaped_variables(self._nodes_per_layer, stddev=0.1)
+
+        self._raw_outputs = self._create_network_architecture(
             inputs=self.inputs,
-            nodes_per_layer=self._nodes_per_layer
+            biases=self._biases,
+            weights=self._weights
         )
         self._var_list = self._biases + self._weights
 
@@ -150,12 +154,9 @@ class Network:
 
         return weights
 
-    def _create_network_architecture(self, inputs, nodes_per_layer):
+    def _create_network_architecture(self, inputs, biases, weights):
 
-        biases = self._create_bias_shaped_variables(nodes_per_layer, stddev=0.1)
-        weights = self._create_weight_shaped_variables(nodes_per_layer, stddev=0.1)
-
-        num_hidden_layers = len(nodes_per_layer) - 2
+        num_hidden_layers = len(self._nodes_per_layer) - 2
 
         prev = inputs
         for layer_idx in range(num_hidden_layers):
@@ -170,14 +171,14 @@ class Network:
         # The softmax application function is applied later for optimization
         # and for exact classification, we just look at the magnitudes of the
         # raw values.
-        layer_idx = str(len(nodes_per_layer)-1)
+        layer_idx = str(len(self._nodes_per_layer)-1)
 
         b = biases[-1]
         W = weights[-1]
 
         outputs = tf.add(tf.matmul(prev, W), b, name="RawOutputs")
 
-        return biases, weights, outputs
+        return outputs
 
 
 class EWCNetwork(Network):
