@@ -1,7 +1,5 @@
 import tensorflow as tf
 
-from fisher import FisherDiagonalMixin
-
 
 class Network:
 
