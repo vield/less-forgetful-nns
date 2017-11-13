@@ -18,6 +18,8 @@ class TrainingSetup:
 
         permuted_datasets = get_dataset_permutations(options.data_dir, options.permutations)
 
+        self.mode = options.mode
+
         self.training_datasets = permuted_datasets
         self.evaluation_datasets = permuted_datasets
         self.network = Network()
@@ -61,11 +63,12 @@ class TrainingSetup:
 
                 this_wasnt_the_last_dataset = self.current_dataset < self.num_datasets
                 if this_wasnt_the_last_dataset:
-                    # Update Fisher diagonal and save old values if running in EWC mode
-                    self.network.reset_fisher_diagonal(sess)
-                    self.network.savepoint_current_vars(sess)
-                    self.network.update_fisher_diagonal(sess, dataset=data.train)
-                    self.network.set_train_step()
+                    if self.mode == 'ewc':
+                        # Update Fisher diagonal and save old values if running in EWC mode
+                        self.network.reset_fisher_diagonal(sess)
+                        self.network.savepoint_current_vars(sess)
+                        self.network.update_fisher_diagonal(sess, dataset=data.train)
+                        self.network.set_train_step()
 
             # Update overall counter
             self.batches_left -= 1
