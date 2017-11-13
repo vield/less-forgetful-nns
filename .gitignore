@@ -1,7 +1,9 @@
 .idea
 __pycache__
+*.pyc
 
 *.csv
 
 MNIST_data/
 papers/
+.ipynb_checkpoints/
