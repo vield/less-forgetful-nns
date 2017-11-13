@@ -47,18 +47,46 @@ def main(options):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description=
+"""Runs a single experiment to demonstrate catastrophic forgetting in 
+neural networks, and Elastic Weight Consolidation to overcome it.
+The results are recorded in .csv files so they can be plotted later.
+
+You have the choice of three modes:
+
+1. Simple
+    This mode sequentially trains the network on different datasets
+    of equal complexity.
+    The network will "forget" what it learned about the first datasets 
+    as it learns more.
+2. Mixed
+    This mode trains the network on different datasets that have
+    been shuffled together before training.
+    The network learns all datasets, but we have to have all of
+    the data at the start.
+3. EWC
+    This mode sequentially trains the networks on different datasets,
+    using Elastic Weight Consolidation to prevent the network from
+    forgetting so much about previously learned data.
+    
+The datasets are permutations of the MNIST handwritten digit dataset.
+""", formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument('--data_dir', type=str, default='./MNIST_data',
                       help='Directory for storing input data')
-    parser.add_argument('--mode', type=str, default="simple", choices=('simple', 'mixed', 'ewc'))
+    parser.add_argument('--mode', type=str, default="simple",
+                        choices=('simple', 'mixed', 'ewc'),
+                        help='Type of experiment to run')
+    parser.add_argument('--batch_size', type=int, default=100,
+                        help='Batch size to use in training')
+    parser.add_argument('--num_batches', type=int, default=3000,
+                        help='Number of batches per dataset')
+    parser.add_argument('--permutations', type=int, default=2,
+                        help='Number of datasets to generate')
 
     options = parser.parse_args()
 
     # ...could be made configurable later... for now, we have some
     # pseudoparameters here so they're easier to pass around
-    options.permutations = 2
-    options.batch_size = 100
-    options.num_batches = 3000
     options.log_frequency = 50
     options.filename = options.mode + '.csv'
     options.verbose = True
