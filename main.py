@@ -58,7 +58,7 @@ if __name__ == '__main__':
     # pseudoparameters here so they're easier to pass around
     options.permutations = 2
     options.batch_size = 100
-    options.num_batches = 1000
+    options.num_batches = 3000
     options.log_frequency = 50
     options.filename = options.mode + '.csv'
     options.verbose = True

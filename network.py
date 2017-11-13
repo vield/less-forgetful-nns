@@ -190,7 +190,7 @@ class EWCNetwork(ListOperationsMixin, Network):
     the network to save the old weight/bias values and to compute
     the Fisher diagonal."""
 
-    def __init__(self, fisher_batch_size=100, *args, **kwargs):
+    def __init__(self, fisher_coeff=1, fisher_batch_size=100, learning_rate=0.01, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         # The computational graph is built to compute the Fisher diagonal
@@ -201,6 +201,8 @@ class EWCNetwork(ListOperationsMixin, Network):
         # and it appears to be faster to not come back to Python as often).
         # Batching idea shamelessly copied from https://github.com/stokesj/EWC
         self.fisher_batch_size = fisher_batch_size
+        self.fisher_coeff = fisher_coeff
+        self.learning_rate = learning_rate
 
         # Savepointed versions of self._biases, self._weights and self._var_list
         self._old_biases = self._create_bias_shaped_variables(
@@ -214,6 +216,8 @@ class EWCNetwork(ListOperationsMixin, Network):
             trainable=False
         )
         self._old_var_list = self._old_biases + self._old_weights
+
+        self._savepointed_vars_exist = False
 
         # self._var_list, self._old_var_list and self._fisher_diagonal all have
         # the same shape.
@@ -230,38 +234,7 @@ class EWCNetwork(ListOperationsMixin, Network):
             trainable=False
         )
 
-        # The "lambda" from the paper.
-        # Sets the relative informance of the EWC penalty vs the new dataset.
-        self._fisher_coeff = tf.Variable(initial_value=0.0, name="FisherCoefficient")
-
-        self._squared_var_distances_scaled_by_fisher = []
-        for var, old_var, fisher in zip(self._var_list, self._old_var_list, self._fisher_diagonal):
-            self._squared_var_distances_scaled_by_fisher.append(
-                tf.multiply(
-                    fisher,
-                    # Hacky way to get the first part of the name
-                    # var.name will give something like "Biases1:0"
-                    # We want "SquaredDistBiases1"
-                    # Having to do this is probably a symptom of me
-                    # misunderstanding the namespacing system...
-                    # we can think about it later.
-                    tf.square(tf.subtract(var, old_var), name="SquaredDist" + var.name.split(":")[0])
-                )
-            )
-
-        # Sum of the above
-        self._ewc_penalty = tf.add_n([tf.reduce_sum(svd) for svd in self._squared_var_distances_scaled_by_fisher])
-
-        # (1/2) * lambda * sum of weighted squared distances
-        self._ewc_cost = tf.add(
-            self._cross_entropy,
-            tf.multiply(
-                tf.multiply(self._fisher_coeff, 0.5),
-                self._ewc_penalty),
-            name="EWCCost"
-        )
-
-        self._train_step = self._optimizer.minimize(self._ewc_cost)
+        self._optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
 
         #
         #
@@ -275,6 +248,8 @@ class EWCNetwork(ListOperationsMixin, Network):
         # is used by the cost function, or added to it with a weight, or any
         # other preprocessing).
         self._fisher_diagonal_computed = None
+
+        self._fisher_sum_up_operation = None
 
         self._create_fisher_diagonal_computational_graph()
 
@@ -294,13 +269,44 @@ class EWCNetwork(ListOperationsMixin, Network):
             assignments.append(tf.assign(self._old_var_list[i], self._var_list[i]))
 
         sess.run(assignments)
+        self._savepointed_vars_exist = True
 
     def reset_fisher_diagonal(self, sess):
         """Sets the Fisher information to all zeroes."""
         self.reset_vars(sess, self._fisher_diagonal)
 
-    def update_fisher_coefficient(self, sess, new_coefficient):
-        sess.run(tf.assign(self._fisher_coeff, new_coefficient))
+    def set_train_step(self, learning_rate=None, fisher_coeff=None):
+        if learning_rate is None:
+            learning_rate = self.learning_rate
+        if fisher_coeff is None:
+            fisher_coeff = self.fisher_coeff
+        if not self._savepointed_vars_exist:
+            fisher_coeff = 0.0
+
+
+        self._squared_var_distances_scaled_by_fisher = []
+        for var, old_var, fisher in zip(self._var_list, self._old_var_list, self._fisher_diagonal):
+            self._squared_var_distances_scaled_by_fisher.append(
+                tf.multiply(
+                    fisher,
+                    tf.square(tf.subtract(var, old_var), name="SquaredDist" + var.name.split(":")[0])
+                )
+            )
+
+        # Sum of the above
+        self._ewc_penalty = tf.add_n([tf.reduce_sum(svd) for svd in self._squared_var_distances_scaled_by_fisher])
+
+        # (1/2) * lambda * sum of weighted squared distances
+        self._ewc_cost = tf.add(
+            self._cross_entropy,
+            tf.multiply(
+                tf.cast(tf.divide(fisher_coeff, 2), tf.float32),
+                self._ewc_penalty
+            ),
+            name="EWCCost"
+        )
+
+        self._train_step = self._optimizer.minimize(self._ewc_cost, var_list=self._var_list)
 
     def update_fisher_diagonal(self, sess, dataset):
         """Computes the Fisher diagonal for the current self._var_list.
@@ -329,8 +335,7 @@ class EWCNetwork(ListOperationsMixin, Network):
             print("In batch {}".format(batch+1))
             batch_xs, batch_ys = dataset.next_batch(self.fisher_batch_size)
             feed_dict = {self._fisher_inputs: batch_xs, self._fisher_correct_labels: batch_ys}
-            assignations = [tf.assign_add(self._fisher_diagonal_computed[i], self._fisher_delta[i]) for i in range(len(self._var_list))]
-            sess.run(assignations, feed_dict=feed_dict)
+            sess.run(self._fisher_sum_up_operation, feed_dict=feed_dict)
 
         divisions = [
             tf.divide(self._fisher_diagonal_computed[i], num_batches * self.fisher_batch_size)
@@ -343,9 +348,6 @@ class EWCNetwork(ListOperationsMixin, Network):
             for i in range(len(self._var_list))
         ]
         sess.run(assignations)
-
-    def print_test(self):
-        print("I can print stuff!")
 
     #
     #
@@ -429,3 +431,8 @@ class EWCNetwork(ListOperationsMixin, Network):
             name_prefix="FisherWeightsComputed",
             trainable=False
         )
+
+        self._fisher_sum_up_operation = [
+            tf.assign_add(fisher_tmp, fisher_delta)
+            for fisher_tmp, fisher_delta in zip(self._fisher_diagonal_computed, self._fisher_delta)
+        ]

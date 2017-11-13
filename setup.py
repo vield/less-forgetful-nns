@@ -27,6 +27,7 @@ class TrainingSetup:
             self.training_datasets = (combined,)
         elif options.mode == 'ewc':
             self.network = EWCNetwork()
+            self.network.set_train_step()
 
         self.batch_size = options.batch_size
         self.batch_index = 0
@@ -60,8 +61,11 @@ class TrainingSetup:
 
                 this_wasnt_the_last_dataset = self.current_dataset < self.num_datasets
                 if this_wasnt_the_last_dataset:
-                    # FIXME: Update Fisher diagonal and save old values if running in EWC mode
-                    pass
+                    # Update Fisher diagonal and save old values if running in EWC mode
+                    self.network.reset_fisher_diagonal(sess)
+                    self.network.savepoint_current_vars(sess)
+                    self.network.update_fisher_diagonal(sess, dataset=data.train)
+                    self.network.set_train_step()
 
             # Update overall counter
             self.batches_left -= 1
