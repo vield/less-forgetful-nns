@@ -13,6 +13,8 @@ class TrainingSetup:
 
         # Conditional imports, the TensorFlow imports are slow so we only
         # want to execute them if we've actually got this far.
+        import tensorflow as tf
+
         from data import get_dataset_permutations, merge_datasets
         from network import Network, EWCNetwork
 
@@ -22,7 +24,10 @@ class TrainingSetup:
 
         self.training_datasets = permuted_datasets
         self.evaluation_datasets = permuted_datasets
-        self.network = Network()
+
+        if options.mode not in ['ewc', 'l2']:
+            # To prevent "_1" suffixes in variable names in the checkpoint...
+            self.network = Network()
 
         if options.mode == 'mixed':
             combined = merge_datasets(permuted_datasets)
@@ -39,6 +44,12 @@ class TrainingSetup:
         self.num_datasets = len(self.training_datasets)
 
         self.batches_left = self.num_datasets * self.num_batches
+
+        vars = self.network._var_list[:]
+        if options.mode in ['ewc', 'l2']:
+            vars += self.network._fisher_diagonal[:]
+
+        self.saver = tf.train.Saver(vars)
 
     def train_batch(self, sess):
         """Run a single step of the experiment.
@@ -73,6 +84,9 @@ class TrainingSetup:
                         self.network.set_uniform_fisher_diagonal(sess)
                         self.network.savepoint_current_vars(sess)
                         self.network.set_train_step(fisher_coeff=0.1)
+
+                save_file = self.saver.save(sess, "./" + self.mode + str(self.current_dataset) + ".ckpt")
+                print("Model saved in file: " + save_file)
 
             # Update overall counter
             self.batches_left -= 1
