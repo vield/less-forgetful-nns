@@ -8,7 +8,7 @@ class TrainingSetup:
     were defined.
     """
     def __init__(self, options):
-        if options.mode not in ['simple', 'mixed', 'ewc']:
+        if options.mode not in ['simple', 'mixed', 'ewc', 'l2']:
             raise Exception("Unrecognized mode: " + options.mode)
 
         # Conditional imports, the TensorFlow imports are slow so we only
@@ -27,7 +27,7 @@ class TrainingSetup:
         if options.mode == 'mixed':
             combined = merge_datasets(permuted_datasets)
             self.training_datasets = (combined,)
-        elif options.mode == 'ewc':
+        elif options.mode == 'ewc' or options.mode == 'l2':
             self.network = EWCNetwork()
             self.network.set_train_step()
 
@@ -69,6 +69,10 @@ class TrainingSetup:
                         self.network.savepoint_current_vars(sess)
                         self.network.update_fisher_diagonal(sess, dataset=data.train)
                         self.network.set_train_step()
+                    elif self.mode == 'l2':
+                        self.network.set_uniform_fisher_diagonal(sess)
+                        self.network.savepoint_current_vars(sess)
+                        self.network.set_train_step(fisher_coeff=0.1)
 
             # Update overall counter
             self.batches_left -= 1

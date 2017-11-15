@@ -96,6 +96,16 @@ class EWCNetwork(ListOperationsMixin, Network):
         """Sets the Fisher information to all zeroes."""
         self.reset_vars(sess, self._fisher_diagonal)
 
+    def set_uniform_fisher_diagonal(self, sess):
+        """Sets the Fisher information to all ones.
+
+        Useful for demonstrating how the L2 penalty does not work."""
+        assignments = []
+        for tensor in self._fisher_diagonal:
+            assignments.append(tf.assign(tensor, tf.ones_like(tensor)))
+
+        sess.run(assignments)
+
     def set_train_step(self, learning_rate=None, fisher_coeff=None):
         if learning_rate is None:
             learning_rate = self.learning_rate
@@ -103,7 +113,6 @@ class EWCNetwork(ListOperationsMixin, Network):
             fisher_coeff = self.fisher_coeff
         if not self._savepointed_vars_exist:
             fisher_coeff = 0.0
-
 
         self._squared_var_distances_scaled_by_fisher = []
         for var, old_var, fisher in zip(self._var_list, self._old_var_list, self._fisher_diagonal):

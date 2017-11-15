@@ -19,6 +19,7 @@ if __name__ == "__main__":
     data = [
         Data("simple.csv", "Sequential training"),
         Data("mixed.csv", "Training with the full dataset"),
+        Data("l2.csv", "With a uniform quadratic penalty"),
         Data("ewc.csv", "With EWC")
     ]
 

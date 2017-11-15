@@ -68,13 +68,17 @@ You have the choice of three modes:
     This mode sequentially trains the networks on different datasets,
     using Elastic Weight Consolidation to prevent the network from
     forgetting so much about previously learned data.
+4. L2
+    Like EWC, but not including the Fisher information, just a
+    uniformly weighted quadratic penalty for moving away from the
+    old mode.
     
 The datasets are permutations of the MNIST handwritten digit dataset.
 """, formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument('--data_dir', type=str, default='./MNIST_data',
                       help='Directory for storing input data')
     parser.add_argument('--mode', type=str, default="simple",
-                        choices=('simple', 'mixed', 'ewc'),
+                        choices=('simple', 'mixed', 'ewc', 'l2'),
                         help='Type of experiment to run')
     parser.add_argument('--batch_size', type=int, default=100,
                         help='Batch size to use in training')
