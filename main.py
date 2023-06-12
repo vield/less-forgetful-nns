@@ -37,6 +37,9 @@ def run_training(sess, setup, options):
 def main(options):
     # Conditional import so `main.py --help` stays fast
     import tensorflow as tf
+    import time
+
+    start = time.time()
 
     setup = TrainingSetup(options)
 
@@ -44,6 +47,8 @@ def main(options):
     tf.global_variables_initializer().run()
 
     run_training(sess, setup, options)
+    end = time.time()
+    print(options.mode,"running time: ",end - start)
 
 
 if __name__ == '__main__':

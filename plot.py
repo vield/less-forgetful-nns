@@ -23,7 +23,7 @@ if __name__ == "__main__":
         Data("ewc.csv", "With EWC")
     ]
 
-    fig = plt.figure()
+    fig = plt.figure(figsize=(15,12))
 
     total_plots = len(data)
     axes = []
